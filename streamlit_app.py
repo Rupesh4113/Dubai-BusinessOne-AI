@@ -28,16 +28,16 @@ from backend.app.calculator import (
     calculate_dubai_det_fees,
     calculate_dubai_chamber_fee,
     reconcile_invoice,
-    validate_trn,
+    validate_uae_trn,
     VATCalculationRequest,
     CorporateTaxRequest,
     DubaiDETFeeRequest,
     DubaiChamberFeeRequest,
-    InvoiceItem,
+    InvoiceLineItem,
     InvoiceReconciliationRequest,
 )
-from backend.app.knowledge.verified_data import search_verified_regulations, VERIFIED_REGULATORY_RECORDS
-from backend.app.knowledge.official_sources import OFFICIAL_SOURCES
+from backend.app.knowledge.verified_data import search_verified_knowledge, VERIFIED_REGULATORY_RECORDS
+from backend.app.knowledge.official_sources import OFFICIAL_SOURCE_REGISTRY
 
 # Streamlit Page Config
 st.set_page_config(
@@ -427,18 +427,25 @@ with tab_calc:
             is_inclusive = st.checkbox("Amount is Tax-Inclusive", value=False)
 
         if st.button("Calculate VAT", key="btn_vat"):
+            cat_map = {
+                "STANDARD_5_PERCENT": "standard",
+                "ZERO_RATED": "zero_rated",
+                "EXEMPT": "exempt",
+                "REVERSE_CHARGE": "standard"
+            }
             vat_req = VATCalculationRequest(
                 amount=Decimal(str(vat_amount)),
-                rate_type=vat_rate_type,
-                is_inclusive=is_inclusive,
+                vat_category=cat_map.get(vat_rate_type, "standard"),
+                is_tax_inclusive=is_inclusive,
+                apply_reverse_charge=(vat_rate_type == "REVERSE_CHARGE")
             )
             vat_res = calculate_uae_vat(vat_req)
-            st.success(f"**Calculated Total:** AED {vat_res.total_amount:,.2f}")
+            st.success(f"**Calculated Total:** AED {float(vat_res.total_amount):,.2f}")
             c_res1, c_res2, c_res3 = st.columns(3)
-            c_res1.metric("Net Subtotal", f"AED {vat_res.net_amount:,.2f}")
-            c_res2.metric("VAT Amount (5%)", f"AED {vat_res.vat_amount:,.2f}")
-            c_res3.metric("Effective Rate", f"{vat_res.effective_rate_percent}%")
-            st.info(f"**Legal Basis:** {vat_res.legal_basis}")
+            c_res1.metric("Base Subtotal", f"AED {float(vat_res.base_amount):,.2f}")
+            c_res2.metric("VAT Amount", f"AED {float(vat_res.vat_amount):,.2f}")
+            c_res3.metric("Effective Rate", f"{vat_res.vat_rate_percent}%")
+            st.info(f"**Statutory Reference:** {vat_res.statutory_reference}")
 
     # Corporate Tax Sub-Tab
     with calc_sub_tabs[1]:
@@ -456,19 +463,19 @@ with tab_calc:
 
         if st.button("Calculate Corporate Tax", key="btn_ct"):
             ct_req = CorporateTaxRequest(
-                net_profit=Decimal(str(net_profit)),
-                turnover=Decimal(str(turnover)),
-                is_free_zone=is_free_zone,
-                qualifying_income=Decimal(str(qualifying_income)),
+                taxable_net_profit=Decimal(str(net_profit)),
+                annual_revenue=Decimal(str(turnover)),
+                is_qualifying_free_zone_person=is_free_zone,
+                qualifying_income=Decimal(str(qualifying_income)) if is_free_zone else None,
             )
             ct_res = calculate_uae_corporate_tax(ct_req)
-            st.success(f"**Total Corporate Tax Due:** AED {ct_res.tax_due:,.2f}")
+            st.success(f"**Total Corporate Tax Due:** AED {float(ct_res.total_tax_payable_aed):,.2f}")
             c_ct1, c_ct2, c_ct3, c_ct4 = st.columns(4)
-            c_ct1.metric("Taxable Profit", f"AED {ct_res.taxable_profit:,.2f}")
-            c_ct2.metric("Exempt Portion (0%)", f"AED {ct_res.exempt_profit:,.2f}")
-            c_ct3.metric("Tax Due (9%)", f"AED {ct_res.tax_due:,.2f}")
+            c_ct1.metric("Taxable Profit", f"AED {float(ct_res.taxable_net_profit):,.2f}")
+            c_ct2.metric("Exempt Tier (0%)", f"AED {float(ct_res.tier1_exempt_amount):,.2f}")
+            c_ct3.metric("Tax Due (9%)", f"AED {float(ct_res.total_tax_payable_aed):,.2f}")
             c_ct4.metric("Effective Rate", f"{ct_res.effective_tax_rate_percent}%")
-            if ct_res.is_small_business_relief_eligible:
+            if ct_res.small_business_relief_applied:
                 st.info("💡 **Small Business Relief Applied**: Ministerial Decision No. 73 of 2023 grants 0% tax for revenue ≤ AED 3,000,000.")
             st.caption(f"**Statutory Reference:** {ct_res.statutory_reference}")
 
@@ -482,73 +489,86 @@ with tab_calc:
             is_instant = st.checkbox("Instant License (No Lease Required for Year 1)", value=False)
         with d_col2:
             rent_amount = st.number_input("Annual Lease / Rent (AED)", min_value=0.0, value=120000.0, step=5000.0)
-            initial_approval = st.checkbox("Include Initial Approval Fee (AED 120)", value=True)
-            trade_name_fee = st.checkbox("Include Trade Name Reservation (AED 620)", value=True)
 
         if st.button("Calculate DET & Chamber Fees", key="btn_det"):
             det_req = DubaiDETFeeRequest(
-                legal_form=legal_form,
-                activities=activities,
-                annual_rent=Decimal(str(rent_amount)),
+                license_type=activities[0].lower() if activities else "commercial",
+                annual_office_rent_aed=Decimal(str(rent_amount)),
                 is_instant_license=is_instant,
-                initial_approval_required=initial_approval,
-                trade_name_reservation_required=trade_name_fee,
             )
             det_res = calculate_dubai_det_fees(det_req)
 
-            chamber_req = DubaiChamberFeeRequest(legal_form=legal_form, commercial_activity=activities[0] if activities else "COMMERCIAL")
+            legal_form_map = {
+                "LLC": "llc",
+                "SOLE_ESTABLISHMENT": "sole_proprietorship",
+                "FOREIGN_BRANCH": "branch_foreign",
+                "FREE_ZONE_BRANCH": "freezone_branch"
+            }
+            chamber_req = DubaiChamberFeeRequest(legal_form=legal_form_map.get(legal_form, "llc"))
             chamber_res = calculate_dubai_chamber_fee(chamber_req)
 
-            grand_total = det_res.total_estimated_fee + chamber_res.annual_membership_fee
+            det_total = float(det_res.total_det_setup_cost_aed)
+            chamber_total = float(chamber_res.total_chamber_fee_aed)
+            grand_total = det_total + chamber_total
 
             st.success(f"**Grand Total Formation & Chamber Cost:** AED {grand_total:,.2f}")
             c_d1, c_d2, c_d3 = st.columns(3)
-            c_d1.metric("Total DET License Fees", f"AED {det_res.total_estimated_fee:,.2f}")
-            c_d2.metric("Market Fee (5% Rent)", f"AED {det_res.market_fee:,.2f}")
-            c_d3.metric("Chamber Membership Fee", f"AED {chamber_res.annual_membership_fee:,.2f}")
+            c_d1.metric("Total DET License Fees", f"AED {det_total:,.2f}")
+            c_d2.metric("Market Fee (5% Rent)", f"AED {float(det_res.market_fee_aed):,.2f}")
+            c_d3.metric("Chamber Membership Fee", f"AED {chamber_total:,.2f}")
 
             with st.expander("Detailed Itemized Breakdown"):
-                for k, v in det_res.itemized_breakdown.items():
-                    st.text(f"• {k.replace('_', ' ').title()}: AED {v:,.2f}")
-                st.text(f"• Dubai Chamber Membership ({chamber_res.membership_tier}): AED {chamber_res.annual_membership_fee:,.2f}")
+                st.text(f"• Base License Fee: AED {float(det_res.base_license_fee_aed):,.2f}")
+                st.text(f"• Initial Approval: AED {float(det_res.initial_approval_fee_aed):,.2f}")
+                st.text(f"• Trade Name Reservation: AED {float(det_res.trade_name_reservation_fee_aed):,.2f}")
+                st.text(f"• Market Fee (5% Lease): AED {float(det_res.market_fee_aed):,.2f}")
+                st.text(f"• Knowledge & Innovation Dirhams: AED {float(det_res.knowledge_and_innovation_dirham_aed):,.2f}")
+                st.text(f"• Dubai Chamber Membership ({chamber_res.schedule_tier}): AED {chamber_total:,.2f}")
 
     # Invoice Reconciliation Sub-Tab
     with calc_sub_tabs[3]:
         st.markdown("#### Invoice Rounding & Line-Item Discrepancy Reconciliation")
         st.caption("Validates line items against reported invoice subtotal and VAT down to fils.")
 
-        items_sample = [
-            InvoiceItem(description="Cloud Hosting", quantity=Decimal("2"), unit_price=Decimal("1500.00"), total_exclusive=Decimal("3000.00"), vat_rate=Decimal("0.05"), vat_amount=Decimal("150.00")),
-            InvoiceItem(description="Consulting Advisory", quantity=Decimal("10"), unit_price=Decimal("450.00"), total_exclusive=Decimal("4500.00"), vat_rate=Decimal("0.05"), vat_amount=Decimal("225.00")),
-        ]
         reported_subtotal = st.number_input("Reported Net Subtotal (AED)", value=7500.00, step=10.0)
         reported_vat = st.number_input("Reported VAT (AED)", value=387.50, step=0.50)  # Intentional discrepancy for demo
         reported_total = st.number_input("Reported Grand Total (AED)", value=7887.50, step=10.0)
 
         if st.button("Run Reconciliation Audit", key="btn_recon"):
+            items_sample = [
+                InvoiceLineItem(line_number=1, description="Cloud Hosting", quantity=Decimal("2"), unit_price=Decimal("1500.00"), vat_rate=Decimal("0.05"), reported_line_total=Decimal("3000.00")),
+                InvoiceLineItem(line_number=2, description="Consulting Advisory", quantity=Decimal("10"), unit_price=Decimal("450.00"), vat_rate=Decimal("0.05"), reported_line_total=Decimal("4500.00")),
+            ]
             recon_req = InvoiceReconciliationRequest(
                 invoice_number="INV-2026-DXB-098",
-                items=items_sample,
+                vendor_trn="100234567800003",
+                invoice_date="2026-10-27",
+                line_items=items_sample,
                 reported_subtotal=Decimal(str(reported_subtotal)),
-                reported_vat=Decimal(str(reported_vat)),
+                reported_vat_total=Decimal(str(reported_vat)),
                 reported_grand_total=Decimal(str(reported_total)),
             )
             recon_res = reconcile_invoice(recon_req)
-            if recon_res.is_reconciled:
+            if not recon_res.has_discrepancy:
                 st.success("✅ **Invoice Fully Reconciled**: All calculated sums match reported totals.")
             else:
-                st.error(f"❌ **Discrepancy Detected**: Variance of AED {recon_res.total_discrepancy:,.2f} identified!")
-                st.warning(f"**Discrepancy Notes:** {recon_res.discrepancy_notes}")
+                st.error("❌ **Discrepancy Detected**: Discrepancies identified during audit!")
+                for v in recon_res.variances:
+                    st.warning(f"**{v.field_name} Variance ({v.severity}):** Reported AED {v.reported_value} vs Calculated AED {v.calculated_value}. {v.explanation}")
                 c_rc1, c_rc2 = st.columns(2)
-                c_rc1.metric("Calculated VAT", f"AED {recon_res.calculated_vat:,.2f}")
-                c_rc2.metric("Reported VAT", f"AED {recon_res.reported_vat:,.2f}")
+                c_rc1.metric("Calculated VAT", f"AED {float(recon_res.calculated_vat_total):,.2f}")
+                c_rc2.metric("Reported VAT", f"AED {float(reported_vat):,.2f}")
 
     # TRN Validator Sub-Tab
     with calc_sub_tabs[4]:
         st.markdown("#### UAE Tax Registration Number (TRN) Validator")
         test_trn = st.text_input("Enter 15-Digit TRN", value="100234567800003")
         if st.button("Validate TRN"):
-            is_valid, trn_msg = validate_trn(test_trn)
+            is_valid = validate_uae_trn(test_trn)
+            if is_valid:
+                st.success("✅ Valid 15-digit UAE FTA Tax Registration Number (format compliant).")
+            else:
+                st.error("❌ Invalid TRN. Must be exactly 15 digits starting with prefix '100'.")
             if is_valid:
                 st.success(f"✅ {trn_msg}")
             else:
@@ -570,13 +590,14 @@ with tab_approvals:
 
         for p in pending_tasks:
             with st.container():
-                st.markdown(f"#### 📋 Action: `{p.action_type}`")
-                p_c1, p_c2, p_c3 = st.columns(3)
+                action_name = getattr(p, "action_name", getattr(p, "action_type", "Operational Action"))
+                st.markdown(f"#### 📋 Action: `{action_name}`")
+                p_c1, p_c2 = st.columns(2)
                 p_c1.markdown(f"**Token:** `{p.approval_token}`")
                 p_c2.markdown(f"**Risk Level:** <span class='risk-high'>{p.risk_level}</span>", unsafe_allow_html=True)
-                p_c3.markdown(f"**Estimated Cost:** AED {p.estimated_cost:,.2f}")
 
-                st.json(p.action_payload)
+                params = getattr(p, "input_parameters", getattr(p, "action_payload", {}))
+                st.json(params)
 
                 dec_c1, dec_c2, dec_c3 = st.columns([1, 1, 2])
                 with dec_c1:
@@ -608,16 +629,19 @@ with tab_knowledge:
     st.caption("Authoritative legal corpus grounded in UAE Federal Decrees and Dubai Executive Orders.")
 
     search_q = st.text_input("🔍 Search Regulations by keyword, decree, or topic:", value="tax")
-    results = search_verified_regulations(search_q)
+    results = search_verified_knowledge(search_q)
 
     st.markdown(f"**Found {len(results)} relevant regulatory article(s):**")
     for r in results:
-        with st.expander(f"📜 {r.title} ({r.issuing_authority}) - {r.decree_reference}", expanded=True):
+        with st.expander(f"📜 {r.title} ({r.issuing_authority}) - {r.statutory_law}", expanded=True):
             st.markdown(f"**Summary:** {r.summary}")
-            st.markdown(f"- **Article Ref:** `{r.article_reference}`")
+            if r.detailed_rules:
+                st.markdown("**Key Regulatory Rules:**")
+                for rule in r.detailed_rules:
+                    st.markdown(f"- {rule}")
             st.markdown(f"- **Effective Date:** `{r.effective_date}`")
-            st.markdown(f"- **Official Portal Link:** [{r.official_url}]({r.official_url})")
-            st.caption(f"Verification Checksum: `{r.sha256_checksum[:16]}...` | Last Verified: {r.last_verified_date}")
+            st.markdown(f"- **Official Portal Link:** [{r.official_source_url}]({r.official_source_url})")
+            st.caption(f"Record ID: `{r.record_id}` | Source: `{r.source_id}`")
 
 # -----------------------------------------------------------------------------
 # TAB 5: TELEMETRY & 4-TIER MEMORY

@@ -150,3 +150,8 @@ def search_verified_knowledge(query: str, category: Optional[str] = None, max_re
 
     scored_results.sort(key=lambda x: x[0], reverse=True)
     return [rec for _, rec in scored_results[:max_results]]
+
+
+# Alias for convenience
+search_verified_regulations = search_verified_knowledge
+

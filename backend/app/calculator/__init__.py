@@ -23,6 +23,10 @@ from .models import (
     InvoiceLineItem
 )
 
+# Aliases for convenience
+validate_trn = validate_uae_trn
+InvoiceItem = InvoiceLineItem
+
 __all__ = [
     "to_decimal",
     "quantize_currency",
@@ -34,6 +38,7 @@ __all__ = [
     "convert_currency",
     "reconcile_invoice",
     "validate_uae_trn",
+    "validate_trn",
     "VATCalculationRequest",
     "VATCalculationResult",
     "CorporateTaxRequest",
@@ -46,5 +51,6 @@ __all__ = [
     "CurrencyConversionResult",
     "InvoiceReconciliationRequest",
     "InvoiceReconciliationResult",
-    "InvoiceLineItem"
+    "InvoiceLineItem",
+    "InvoiceItem"
 ]

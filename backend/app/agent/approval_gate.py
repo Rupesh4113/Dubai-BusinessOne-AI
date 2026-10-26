@@ -2,7 +2,7 @@
 
 import secrets
 import time
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 from ..memory import layer4_history, ExecutionRecord
 
 
@@ -40,6 +40,30 @@ class ApprovalGate:
 
         layer4_history.approve_task(task_id, supervisor_id)
         return True, "Approval verified. Task authorized for execution."
+
+    @staticmethod
+    def list_pending() -> List[ExecutionRecord]:
+        """Returns all actions currently awaiting human review."""
+        return layer4_history.list_pending_approvals()
+
+    @staticmethod
+    def record_decision(approval_token: str, decision: str, reviewer_id: str, reviewer_notes: str = "") -> Tuple[bool, str]:
+        """Convenience dispatcher to record an approval or rejection."""
+        matched_task: Optional[ExecutionRecord] = None
+        for p in layer4_history.list_pending_approvals():
+            if p.approval_token == approval_token:
+                matched_task = p
+                break
+
+        if not matched_task:
+            return False, "Token not found among pending approvals."
+
+        if decision.upper() == "APPROVED":
+            return ApprovalGate.verify_and_grant_approval(matched_task.task_id, approval_token, reviewer_id)
+        else:
+            matched_task.status = "REJECTED"
+            matched_task.audit_notes.append(f"Rejected by {reviewer_id}. Notes: {reviewer_notes}")
+            return True, "Action has been rejected and cancelled."
 
 
 approval_gate = ApprovalGate()

@@ -1,7 +1,7 @@
 # =================================================================
-# Dockerfile for Dubai BusinessOne AI — Backend
+# Dockerfile for Dubai BusinessOne AI — Streamlit & Operations Engine
 # =================================================================
-FROM python:3.12-slim as backend
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -10,15 +10,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    gcc \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend/app ./backend/app
-COPY backend/tests ./backend/tests
+COPY . .
 
-EXPOSE 8000
+EXPOSE 8501 8000
 
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
+
+CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]

@@ -110,7 +110,14 @@ python benchmarks/run_benchmark.py
 
 ### 3.3 Start the Complete Stack
 
-**Option A: Local Development**
+**Option A: Streamlit Web App (Recommended for Instant Cloud & Local Run)**
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+Open `http://localhost:8501`. (See [`docs/STREAMLIT_DEPLOYMENT.md`](docs/STREAMLIT_DEPLOYMENT.md) for 1-click Streamlit Community Cloud hosting).
+
+**Option B: Full-Stack Next.js + FastAPI**
 1. Start Backend:
    ```bash
    uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -122,9 +129,10 @@ python benchmarks/run_benchmark.py
    ```
    Open `http://localhost:3000`.
 
-**Option B: Docker Compose**
+**Option C: Docker Container**
 ```bash
-docker compose up -d --build
+docker build -t dubai-businessone-ai .
+docker run -p 8501:8501 dubai-businessone-ai
 ```
 
 ---

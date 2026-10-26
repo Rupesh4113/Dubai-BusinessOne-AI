@@ -51,7 +51,17 @@ Access the web application at `http://localhost:3000`.
 
 ---
 
-## 3. Production Deployment with Docker Compose
+## 3. Streamlit Cloud & Instant App Deployment
+The quickest and recommended deployment method is via Streamlit:
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+For free 1-click cloud deployment from GitHub, see [`docs/STREAMLIT_DEPLOYMENT.md`](STREAMLIT_DEPLOYMENT.md).
+
+---
+
+## 4. Production Deployment with Docker Compose
 ```bash
 # Start full stack (FastAPI Backend + Next.js Frontend)
 docker compose up -d --build

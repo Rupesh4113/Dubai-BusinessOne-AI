@@ -53,3 +53,20 @@ npx vercel --prod
 - **Invoice Reconciler**: 15-digit UAE FTA TRN format verification and line-item arithmetic audit.
 - **Multilingual Support**: English, Arabic (`ar` - RTL), Hindi, Urdu (`ur` - RTL), Filipino, and Malayalam with dynamic bidirectional layouts.
 - **Telemetry & Zero-Inference Cache**: Real-time stats on tokens saved and cache hit ratio.
+
+
+---
+
+## 4. Troubleshooting: `npm warn Unknown env config "cache-dir"`
+
+### Why it occurs
+In npm v11+ (shipped with newer Node versions), npm strictly validates any environment variable prefixed with `npm_config_`. When build systems or automated tools pass `npm_config_cache_dir`, npm throws:
+```text
+npm warn Unknown env config "cache-dir". This will stop working in the next major version of npm.
+```
+because npm's canonical configuration key is `cache` (or `npm_config_cache`), not `cache-dir`.
+
+### How it is resolved in this repository
+1. **Node LTS Engine Pinning**: `package.json` specifies `"engines": { "node": ">=18.17.0 <=20.x" }` to use Node 20 LTS.
+2. **Environment Stripping**: `vercel.json` prefixes the install command with `env -u npm_config_cache_dir` to ensure the un-canonical variable is unset during deployment.
+3. **Vercel Project Settings**: If you have manually defined `npm_config_cache_dir` in your Vercel Project Settings > Environment Variables, you can safely remove it.

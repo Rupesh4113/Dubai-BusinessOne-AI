@@ -8,6 +8,6 @@
     "start": "npm --prefix frontend run start"
   },
   "engines": {
-    "node": ">=18.17.0 <=20.x"
+    "node": "24.x"
   }
 }

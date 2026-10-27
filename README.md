@@ -135,6 +135,9 @@ docker build -t dubai-businessone-ai .
 docker run -p 8501:8501 dubai-businessone-ai
 ```
 
+**Option D: Netlify Cloud Deployment (1-Click Next.js Web App)**
+Connect GitHub repository `Rupesh4113/Dubai-BusinessOne-AI` to Netlify. Root `netlify.toml` automatically configures the Next.js runtime. See [`docs/NETLIFY_DEPLOYMENT.md`](docs/NETLIFY_DEPLOYMENT.md).
+
 ---
 
 ## 4. Competition Showcase Scenarios

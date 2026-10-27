@@ -61,7 +61,15 @@ For free 1-click cloud deployment from GitHub, see [`docs/STREAMLIT_DEPLOYMENT.m
 
 ---
 
-## 4. Production Deployment with Docker Compose
+## 4. Netlify Deployment (Next.js 14 App Router)
+Connect your GitHub repository to Netlify for 1-click serverless deployment:
+- Pre-configured with [`netlify.toml`](../netlify.toml) and `@netlify/plugin-nextjs`.
+- Automatically deploys frontend pages, multilingual LTR/RTL views, and serverless API handlers.
+- See [`docs/NETLIFY_DEPLOYMENT.md`](NETLIFY_DEPLOYMENT.md) for full instructions.
+
+---
+
+## 5. Production Deployment with Docker Compose
 ```bash
 # Start full stack (FastAPI Backend + Next.js Frontend)
 docker compose up -d --build
